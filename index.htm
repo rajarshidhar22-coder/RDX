@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Split UPI Payment</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 400px; margin: 40px auto; padding: 20px; background: #f9f9f9; }
+        .card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        input, select, button { width: 100%; padding: 10px; margin-top: 10px; box-sizing: border-box; }
+        button { background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:hover { background: #218838; }
+        .delete-btn { background: #dc3545; margin-top: 5px; font-size: 14px; padding: 6px; }
+        .delete-btn:hover { background: #c82333; }
+        .step { margin-top: 15px; padding: 10px; border: 1px dashed #ccc; border-radius: 4px; background: #fff; }
+        .hidden { display: none; }
+        .row { display: flex; gap: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>Split UPI Payment</h2>
+    
+    <label>Select UPI ID:</label>
+    <select id="upiSelect" onchange="handleUpiSelection()">
+        <option value="" disabled selected>Select a saved UPI ID</option>
+        <option value="NEW">+ Add New UPI ID</option>
+    </select>
+
+    <!-- Hidden form fields to add a new UPI ID -->
+    <div id="newUpiContainer" class="hidden">
+        <label>New UPI ID (VPA):</label>
+        <input type="text" id="newUpiId" placeholder="e.g. name@paytm">
+        
+        <label>Label / Nickname:</label>
+        <input type="text" id="newUpiLabel" placeholder="e.g. Personal Account">
+        
+        <button type="button" onclick="saveNewUpi()" style="background: #007bff;">Save UPI ID</button>
+    </div>
+
+    <button id="deleteBtn" class="delete-btn hidden" onclick="deleteSelectedUpi()">Delete Selected UPI ID</button>
+
+    <label style="margin-top: 15px; display:block;">Total Amount (₹):</label>
+    <input type="number" id="totalAmount" placeholder="e.g. 4500">
+
+    <label>Max Amount per Split (Keep under 2000):</label>
+    <input type="number" id="chunkSize" value="1900">
+
+    <button onclick="generateSplitLinks()" style="margin-top: 15px;">Generate Split Links</button>
+
+    <div id="linksContainer"></div>
+</div>
+
+<script>
+    // Load saved UPIs from browser storage on startup
+    document.addEventListener("DOMContentLoaded", loadUpiDropdown);
+
+    function getSavedUpis() {
+        let upis = localStorage.getItem('saved_upis');
+        return upis ? JSON.parse(upis) : [];
+    }
+
+    function loadUpiDropdown() {
+        const select = document.getElementById('upiSelect');
+        const savedUpis = getSavedUpis();
+        
+        // Clear existing options except the default ones
+        select.innerHTML = `<option value="" disabled selected>Select a saved UPI ID</option>
+                            <option value="NEW">+ Add New UPI ID</option>`;
+
+        // Insert saved UPIs before the "+ Add New" option
+        savedUpis.forEach((item, index) => {
+            let option = document.createElement('option');
+            option.value = item.vpa;
+            option.textContent = `${item.label} (${item.vpa})`;
+            select.insertBefore(option, select.lastElementChild);
+        });
+
+        // If there's at least one saved UPI, auto-select the first one
+        if (savedUpis.length > 0) {
+            select.value = savedUpis[0].vpa;
+            document.getElementById('deleteBtn').classList.remove('hidden');
+        }
+    }
+
+    function handleUpiSelection() {
+        const select = document.getElementById('upiSelect');
+        const newContainer = document.getElementById('newUpiContainer');
+        const deleteBtn = document.getElementById('deleteBtn');
+
+        if (select.value === 'NEW') {
+            newContainer.classList.remove('hidden');
+            deleteBtn.classList.add('hidden');
+            document.getElementById('newUpiId').value = '';
+            document.getElementById('newUpiLabel').value = '';
+        } else {
+            newContainer.classList.add('hidden');
+            deleteBtn.classList.remove('hidden');
+        }
+    }
+
+    function saveNewUpi() {
+        let vpa = document.getElementById('newUpiId').value.trim();
+        let label = document.getElementById('newUpiLabel').value.trim();
+
+        if (!vpa) {
+            alert('Please enter a valid UPI ID.');
+            return;
+        }
+        if (!label) {
+            label = vpa; // fallback label if left blank
+        }
+
+        let savedUpis = getSavedUpis();
+        savedUpis.push({ vpa: vpa, label: label });
+        localStorage.setItem('saved_upis', JSON.stringify(savedUpis));
+
+        // Reload dropdown and select the newly added one
+        loadUpiDropdown();
+        document.getElementById('upiSelect').value = vpa;
+        document.getElementById('newUpiContainer').classList.add('hidden');
+        document.getElementById('deleteBtn').classList.remove('hidden');
+    }
+
+    function deleteSelectedUpi() {
+        const select = document.getElementById('upiSelect');
+        let selectedVpa = select.value;
+
+        if (!selectedVpa || selectedVpa === 'NEW') return;
+
+        if (confirm(`Are you sure you want to delete ${selectedVpa}?`)) {
+            let savedUpis = getSavedUpis();
+            savedUpis = savedUpis.filter(item => item.vpa !== selectedVpa);
+            localStorage.setItem('saved_upis', JSON.stringify(savedUpis));
+            
+            loadUpiDropdown();
+            document.getElementById('deleteBtn').classList.add('hidden');
+        }
+    }
+
+    function generateSplitLinks() {
+        const select = document.getElementById('upiSelect');
+        const upiId = select.value;
+        let total = parseFloat(document.getElementById('totalAmount').value);
+        let maxChunk = parseFloat(document.getElementById('chunkSize').value);
+        const container = document.getElementById('linksContainer');
+        
+        container.innerHTML = '';
+
+        if (!upiId || upiId === 'NEW') {
+            alert('Please select or add a valid UPI ID.');
+            return;
+        }
+        if (isNaN(total) || total <= 0) {
+            alert('Please enter a valid total amount.');
+            return;
+        }
+
+        let part = 1;
+        while (total > 0) {
+            let currentAmount = Math.min(total, maxChunk);
+            currentAmount = Math.round(currentAmount * 100) / 100;
+
+            let upiLink = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent("Merchant")}&am=${currentAmount}&cu=INR&tn=${encodeURIComponent("Split Part " + part)}`;
+
+            let div = document.createElement('div');
+            div.className = 'step';
+            div.innerHTML = `<strong>Part ${part}: ₹${currentAmount}</strong><br>
+                             <a href="${upiLink}" style="display:inline-block; margin-top:8px; padding:8px 12px; background:#007bff; color:white; text-decoration:none; border-radius:4px;">Pay ₹${currentAmount} via UPI App</a>`;
+            container.appendChild(div);
+
+            total -= currentAmount;
+            part++;
+        }
+    }
+</script>
+
+</body>
+</html>
