@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Split UPI Payment</title>
+    <!-- PWA Manifest & Theme -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#28a745">
+    
     <style>
         body { font-family: Arial, sans-serif; max-width: 400px; margin: 40px auto; padding: 20px; background: #f9f9f9; }
         .card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
@@ -14,7 +18,6 @@
         .delete-btn:hover { background: #c82333; }
         .step { margin-top: 15px; padding: 10px; border: 1px dashed #ccc; border-radius: 4px; background: #fff; }
         .hidden { display: none; }
-        .row { display: flex; gap: 5px; }
     </style>
 </head>
 <body>
@@ -65,19 +68,16 @@
         const select = document.getElementById('upiSelect');
         const savedUpis = getSavedUpis();
         
-        // Clear existing options except the default ones
         select.innerHTML = `<option value="" disabled selected>Select a saved UPI ID</option>
                             <option value="NEW">+ Add New UPI ID</option>`;
 
-        // Insert saved UPIs before the "+ Add New" option
-        savedUpis.forEach((item, index) => {
+        savedUpis.forEach((item) => {
             let option = document.createElement('option');
             option.value = item.vpa;
             option.textContent = `${item.label} (${item.vpa})`;
             select.insertBefore(option, select.lastElementChild);
         });
 
-        // If there's at least one saved UPI, auto-select the first one
         if (savedUpis.length > 0) {
             select.value = savedUpis[0].vpa;
             document.getElementById('deleteBtn').classList.remove('hidden');
@@ -109,14 +109,13 @@
             return;
         }
         if (!label) {
-            label = vpa; // fallback label if left blank
+            label = vpa;
         }
 
         let savedUpis = getSavedUpis();
         savedUpis.push({ vpa: vpa, label: label });
         localStorage.setItem('saved_upis', JSON.stringify(savedUpis));
 
-        // Reload dropdown and select the newly added one
         loadUpiDropdown();
         document.getElementById('upiSelect').value = vpa;
         document.getElementById('newUpiContainer').classList.add('hidden');
@@ -173,6 +172,12 @@
             total -= currentAmount;
             part++;
         }
+    }
+
+    // Register Service Worker for PWA installation support
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js')
+            .then(() => console.log("Service Worker Registered"));
     }
 </script>
 
